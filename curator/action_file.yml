@@ -1,0 +1,33 @@
+actions:
+  1:
+    action: delete_indices
+    description: >-
+      Alias indices older than 60 days, with a prefix of metricbeat-.
+    options:
+      continue_if_exception: False
+      disable_action: False
+    filters:
+    - filtertype: pattern
+      kind: prefix
+      value: metricbeat-
+    - filtertype: age
+      source: creation_date
+      direction: older
+      unit: days
+      unit_count: 60
+  2:
+    action: delete_indices
+    description: >-
+      Alias indices older than 180 days, all indices.
+    options:
+      continue_if_exception: False
+      disable_action: False
+    filters:
+    - filtertype: pattern
+      kind: prefix
+      value: *-
+    - filtertype: age
+      source: creation_date
+      direction: older
+      unit: days
+      unit_count: 180

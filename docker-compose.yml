@@ -1,0 +1,111 @@
+version: '2'
+
+services:
+
+  elasticsearch:
+    build: elasticsearch/
+    volumes:
+      - ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+# This was used with readonlyrest:
+#      - ./elasticsearch/config/keystore.jks:/usr/share/elasticsearch/config/keystore.jks
+      - /logging/elasticsearch:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      ES_JAVA_OPTS: "-Xmx100g -Xms100g"
+      LOGSTASH_RW_USERNAME: $USERNAME
+      LOGSTASH_RW_PASSWORD: $PASSWORD
+      KIBANA_RW_USERNAME: $USERNAME
+      KIBANA_RW_PASSWORD: $PASSWORD
+      #ENABLE_SSL: false 
+      
+    networks:
+      - docker-net
+
+  logstash:
+    build: logstash/
+    volumes:
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml
+      - ./logstash/pipeline:/usr/share/logstash/pipeline
+    ports:
+      - "5000:5000"
+      - "5044:5044"
+      - "514:514"
+    environment:
+      LS_JAVA_OPTS: "-Xmx100g -Xms100g"
+    networks:
+      - docker-net
+    depends_on:
+      - elasticsearch
+
+  kibana:
+    build: kibana/
+    volumes:
+      - ./kibana/config/:/usr/share/kibana/config
+# no ports to be used with nginx
+#    ports:
+#      - "5601:5601"
+    networks:
+      - docker-net
+    depends_on:
+      - elasticsearch
+    environment:
+      KIBANA_RW_USERNAME: $USERNAME 
+      KIBANA_RW_PASSWORD: $PASSWORD
+      #ENABLE_SSL: false
+
+  elastalert:
+      image: ivankrizsan/elastalert:latest
+      depends_on:
+        - elasticsearch
+        - kibana
+      cap_add:
+        - SYS_TIME
+        - SYS_NICE
+      volumes:
+        - ./elastalert/logs:/opt/logs
+        - ./elastalert/rules:/opt/rules
+        - ./elastalert/config:/opt/config
+      networks:
+        - docker-net
+      links:
+        - elasticsearch:elasticsearch
+      environment:
+        - SET_CONTAINER_TIMEZONE=true
+        - CONTAINER_TIMEZONE=US/Pacific
+        - ELASTICSEARCH_HOST=$ES_HOST
+        - ELASTICSEARCH_PORT=9200
+  curator:
+    build: curator/
+    depends_on:
+      - elasticsearch
+    links: 
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_HOST=$ES_HOST
+      - ELASTICSEARCH_PORT=9200
+    networks:
+      - docker-net
+  
+  nginx:
+    build: nginx/
+    links:
+      - elasticsearch
+      - kibana
+    depends_on:
+      - elasticsearch
+      - kibana
+    volumes:
+      - ./nginx/config:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./nginx/htpasswd.users:/etc/nginx/htpasswd.users
+    ports:
+      - "443:443"
+    networks:
+      - docker-net    
+
+networks:
+  docker-net:
+    external:
+      name: docker-net
